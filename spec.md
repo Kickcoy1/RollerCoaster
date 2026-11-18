@@ -138,3 +138,25 @@ Additional checks:
    - Run the required test: 100 ft start, 0 ft valley, 100 ft radius, no friction, `g = 32.2 ft/s²`.
    - Check: the app shows approximately 54.7 mph and 3.00 g at the valley and should classify it as safe.
    - Check: decreasing the radius increases g-force and moving the start height recalculates the simulation.
+
+## Features
+
+### Ride summary
+
+- Display maximum speed in mph, maximum positive g-force in g, minimum g-force in g, and overall safety status.
+- Calculate summary values from reachable ride samples.
+- Update the summary when the track control points or rolling-friction setting change.
+- Do not replace the live readings or change the animation stop logic.
+
+### Rolling friction slider
+
+- Provide a slider with a rolling-friction coefficient from `0` to `0.020`, defaulting to `0`.
+- Use the simplified energy-loss model:
+
+  `v² = 2g(h_initial - h) - 2μgs`
+
+- `s` is cumulative distance traveled along the track.
+- `μ` is the simplified rolling-friction coefficient.
+- Check for negative available energy before calculating speed.
+- Do not hide unreachable locations by clamping negative energy to zero; keep unreachable-track failures distinct from g-force failures.
+- At zero friction, all existing validated results must remain unchanged, including approximately `54.7 mph` and `3.00 g`.
