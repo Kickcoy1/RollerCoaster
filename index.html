@@ -284,6 +284,50 @@
       font-size: 0.85rem;
     }
 
+    .plot-svg {
+      display: block;
+      width: 100%;
+      height: 175px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #fbfdff;
+    }
+
+    .plot-svg .plot-grid {
+      stroke: #edf2f7;
+      stroke-width: 1;
+    }
+
+    .plot-svg .plot-axis {
+      stroke: #b8c7d6;
+      stroke-width: 1.5;
+    }
+
+    .plot-svg .plot-label {
+      fill: var(--muted);
+      font-size: 11px;
+    }
+
+    .plot-svg .plot-line {
+      fill: none;
+      stroke: var(--blue);
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .plot-svg .current-position-line {
+      stroke: #ef8f2e;
+      stroke-width: 2;
+      stroke-dasharray: 5 4;
+    }
+
+    .plot-svg .current-position-point {
+      fill: #ef8f2e;
+      stroke: #ffffff;
+      stroke-width: 2;
+    }
+
     @media (max-width: 760px) {
       .app {
         width: min(100% - 20px, 1180px);
@@ -375,12 +419,12 @@
     <section class="plots" aria-label="Simulation plots">
       <section class="plot-panel panel">
         <h2>Speed vs. Track Position</h2>
-        <div class="plot-placeholder"><span>Speed plot</span></div>
+        <svg id="speedPlot" class="plot-svg" viewBox="0 0 560 175" role="img" aria-label="Speed in miles per hour versus horizontal track position"></svg>
       </section>
 
       <section class="plot-panel panel">
         <h2>G-force vs. Track Position</h2>
-        <div class="plot-placeholder"><span>G-force plot</span></div>
+        <svg id="gForcePlot" class="plot-svg" viewBox="0 0 560 175" role="img" aria-label="Vertical g-force versus horizontal track position"></svg>
       </section>
     </section>
   </main>
@@ -401,9 +445,9 @@
 
     const defaultPoints = [
       { x: 70, height: 100 },
-      { x: 242, height: 68 },
-      { x: 414, height: 12 },
-      { x: 586, height: 82 },
+      { x: 340, height: 49 },
+      { x: 414, height: 0 },
+      { x: 488, height: 49 },
       { x: 758, height: 28 },
       { x: 930, height: 72 }
     ];
@@ -423,6 +467,8 @@
     const gForceReadout = document.getElementById("gForceReadout");
     const safetyStatus = document.getElementById("safetyStatus");
     const statusPanel = document.querySelector(".status-panel");
+    const speedPlot = document.getElementById("speedPlot");
+    const gForcePlot = document.getElementById("gForcePlot");
 
     function heightToY(height) {
       return bottom - ((height - minHeight) / (maxHeight - minHeight)) * (bottom - top);
@@ -537,18 +583,38 @@
 
       const previous = samples[Math.max(0, closestIndex - 1)];
       const next = samples[Math.min(samples.length - 1, closestIndex + 1)];
-      const dx = Math.max(next.position - previous.position, 0.001);
-      const firstDerivative = (next.height - previous.height) / dx;
-      const secondDerivative = (next.height - 2 * sample.height + previous.height) / ((dx / 2) ** 2);
 
       let radius = Infinity;
       let shape = "flat";
       let gForce = 1;
 
-      if (Math.abs(secondDerivative) > 0.001) {
-        const curvature = Math.abs(secondDerivative) / ((1 + firstDerivative ** 2) ** 1.5);
-        radius = 1 / curvature;
-        shape = secondDerivative > 0 ? "valley" : "crest";
+      const before = samples[Math.max(0, closestIndex - 4)];
+      const after = samples[Math.min(samples.length - 1, closestIndex + 4)];
+      const ax = before.position;
+      const ay = before.height;
+      const bx = sample.position;
+      const by = sample.height;
+      const cx = after.position;
+      const cy = after.height;
+      const abX = bx - ax;
+      const abY = by - ay;
+      const acX = cx - ax;
+      const acY = cy - ay;
+      const cross = abX * acY - abY * acX;
+      const abLength = Math.sqrt(abX * abX + abY * abY);
+      const bcLength = Math.sqrt((cx - bx) ** 2 + (cy - by) ** 2);
+      const acLength = Math.sqrt(acX * acX + acY * acY);
+      const secondDerivativeSign = next.height - 2 * sample.height + previous.height;
+
+      if (Math.abs(cross) > 0.01 && abLength > 0.1 && bcLength > 0.1 && acLength > 0.1) {
+        radius = (abLength * bcLength * acLength) / (2 * Math.abs(cross));
+        if (radius > 500) radius = Infinity;
+        if (radius !== Infinity) {
+          shape = secondDerivativeSign > 0 ? "valley" : "crest";
+        }
+      }
+
+      if (radius !== Infinity) {
 
         if (!energyFailure) {
           gForce = shape === "valley"
@@ -782,6 +848,134 @@
       return physics;
     }
 
+    function drawPlot(svgElement, kind) {
+      const width = 560;
+      const height = 175;
+      const plotLeft = 48;
+      const plotRight = 540;
+      const plotTop = 18;
+      const plotBottom = 145;
+      const speedMax = 90;
+      const gMin = -1.5;
+      const gMax = 4.5;
+      const minimum = kind === "speed" ? 0 : gMin;
+      const maximum = kind === "speed" ? speedMax : gMax;
+
+      svgElement.replaceChildren();
+
+      for (let i = 0; i <= 5; i++) {
+        const y = plotBottom - (i / 5) * (plotBottom - plotTop);
+        svgElement.appendChild(createSvgElement("line", {
+          class: "plot-grid",
+          x1: plotLeft,
+          y1: y,
+          x2: plotRight,
+          y2: y
+        }));
+
+        const value = minimum + (i / 5) * (maximum - minimum);
+        const label = createSvgElement("text", {
+          class: "plot-label",
+          x: plotLeft - 8,
+          y: y + 4,
+          "text-anchor": "end"
+        });
+        label.textContent = kind === "speed" ? `${Math.round(value)}` : value.toFixed(1);
+        svgElement.appendChild(label);
+      }
+
+      for (let i = 0; i <= 5; i++) {
+        const x = plotLeft + (i / 5) * (plotRight - plotLeft);
+        svgElement.appendChild(createSvgElement("line", {
+          class: "plot-grid",
+          x1: x,
+          y1: plotTop,
+          x2: x,
+          y2: plotBottom
+        }));
+
+        const label = createSvgElement("text", {
+          class: "plot-label",
+          x,
+          y: plotBottom + 20,
+          "text-anchor": "middle"
+        });
+        label.textContent = `${Math.round(i * 200)}`;
+        svgElement.appendChild(label);
+      }
+
+      svgElement.appendChild(createSvgElement("line", {
+        class: "plot-axis",
+        x1: plotLeft,
+        y1: plotBottom,
+        x2: plotRight,
+        y2: plotBottom
+      }));
+      svgElement.appendChild(createSvgElement("line", {
+        class: "plot-axis",
+        x1: plotLeft,
+        y1: plotTop,
+        x2: plotLeft,
+        y2: plotBottom
+      }));
+
+      const pathData = [];
+      for (let position = 0; position <= 1000; position += 5) {
+        const physics = getPhysicsAtPosition(position);
+        const value = kind === "speed"
+          ? physics.speedMph
+          : (physics.energyFailure ? 1 : physics.gForce);
+        const x = plotLeft + (position / 1000) * (plotRight - plotLeft);
+        const y = plotBottom - ((value - minimum) / (maximum - minimum)) * (plotBottom - plotTop);
+        pathData.push(`${pathData.length === 0 ? "M" : "L"} ${x} ${Math.max(plotTop, Math.min(plotBottom, y))}`);
+      }
+
+      svgElement.appendChild(createSvgElement("path", {
+        class: "plot-line",
+        d: pathData.join(" ")
+      }));
+
+      const current = getPhysicsAtPosition(selectedPosition);
+      const currentValue = kind === "speed"
+        ? current.speedMph
+        : (current.energyFailure ? 1 : current.gForce);
+      const currentX = plotLeft + (selectedPosition / 1000) * (plotRight - plotLeft);
+      const currentY = plotBottom - ((currentValue - minimum) / (maximum - minimum)) * (plotBottom - plotTop);
+
+      svgElement.appendChild(createSvgElement("line", {
+        class: "current-position-line",
+        x1: currentX,
+        y1: plotTop,
+        x2: currentX,
+        y2: plotBottom
+      }));
+      svgElement.appendChild(createSvgElement("circle", {
+        class: "current-position-point",
+        cx: currentX,
+        cy: Math.max(plotTop, Math.min(plotBottom, currentY)),
+        r: 5
+      }));
+
+      const xTitle = createSvgElement("text", {
+        class: "plot-label",
+        x: (plotLeft + plotRight) / 2,
+        y: height - 3,
+        "text-anchor": "middle"
+      });
+      xTitle.textContent = "Horizontal position (ft)";
+      svgElement.appendChild(xTitle);
+
+      const yTitle = createSvgElement("text", {
+        class: "plot-label",
+        x: 14,
+        y: (plotTop + plotBottom) / 2,
+        "text-anchor": "middle",
+        transform: `rotate(-90 14 ${(plotTop + plotBottom) / 2})`
+      });
+      yTitle.textContent = kind === "speed" ? "Speed (mph)" : "Vertical g-force (g)";
+      svgElement.appendChild(yTitle);
+    }
+
     function drawAxes() {
       for (let height = 0; height <= maxHeight; height += 20) {
         const y = heightToY(height);
@@ -948,6 +1142,8 @@
       });
       svg.appendChild(selectedMarker);
       drawCar();
+      drawPlot(speedPlot, "speed");
+      drawPlot(gForcePlot, "g-force");
     }
 
     svg.addEventListener("pointermove", event => {
