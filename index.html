@@ -66,32 +66,84 @@
       overflow: hidden;
       border: 1px solid var(--border);
       border-radius: 8px;
-      background:
-        linear-gradient(to right, transparent 49.8%, #edf2f7 50%, transparent 50.2%) center / 80px 100%,
-        linear-gradient(to bottom, transparent 49.8%, #edf2f7 50%, transparent 50.2%) center / 100% 68px,
-        #fbfdff;
+      background: #fbfdff;
     }
 
-    .track-placeholder::before {
-      content: "";
-      position: absolute;
-      left: 5%;
-      right: 5%;
-      bottom: 54%;
-      height: 118px;
-      border-top: 5px solid var(--track);
-      border-radius: 50%;
-      transform: skewY(-4deg);
+    #trackSvg {
+      display: block;
+      width: 100%;
+      height: 340px;
+      touch-action: none;
+      user-select: none;
     }
 
-    .track-placeholder::after {
-      content: "Roller coaster track";
-      position: absolute;
-      left: 50%;
-      bottom: 17%;
-      transform: translateX(-50%);
-      color: var(--muted);
-      font-size: 0.9rem;
+    #trackSvg .grid-line {
+      stroke: #edf2f7;
+      stroke-width: 1;
+    }
+
+    #trackSvg .axis-line {
+      stroke: #b8c7d6;
+      stroke-width: 1.5;
+    }
+
+    #trackSvg .axis-label {
+      fill: var(--muted);
+      font-size: 12px;
+    }
+
+    #trackSvg .track-line {
+      fill: none;
+      stroke: var(--track);
+      stroke-width: 6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    #trackSvg .control-point {
+      fill: #ffffff;
+      stroke: var(--blue);
+      stroke-width: 4;
+      cursor: ns-resize;
+    }
+
+    #trackSvg .control-point:hover,
+    #trackSvg .control-point.dragging {
+      fill: #dceeff;
+    }
+
+    #trackSvg .selected-marker {
+      fill: var(--blue);
+      stroke: #ffffff;
+      stroke-width: 3;
+    }
+
+    #trackSvg .failure-marker {
+      stroke: #ffffff;
+      stroke-width: 2;
+      pointer-events: none;
+    }
+
+    #trackSvg .energy-marker {
+      fill: #d97706;
+    }
+
+    #trackSvg .g-high-marker {
+      fill: #dc2626;
+    }
+
+    #trackSvg .g-low-marker {
+      fill: #7c3aed;
+    }
+
+    #trackSvg .roller-coaster-car {
+      fill: #1677b8;
+      stroke: #ffffff;
+      stroke-width: 3;
+    }
+
+    #trackSvg .roller-coaster-car-shadow {
+      fill: rgba(24, 50, 74, 0.18);
     }
 
     .below-track {
@@ -179,6 +231,22 @@
       font-size: 1.25rem;
     }
 
+    .status-panel.status-unsafe {
+      border-left-color: #dc2626;
+    }
+
+    .status-panel.status-unsafe strong {
+      color: #dc2626;
+    }
+
+    .status-panel.status-energy {
+      border-left-color: #d97706;
+    }
+
+    .status-panel.status-energy strong {
+      color: #d97706;
+    }
+
     .plots {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -226,6 +294,10 @@
         min-height: 260px;
       }
 
+      #trackSvg {
+        height: 260px;
+      }
+
       .below-track,
       .plots {
         grid-template-columns: 1fr;
@@ -265,36 +337,38 @@
     </header>
 
     <section class="track-panel panel" aria-label="Roller coaster track">
-      <div class="track-placeholder"></div>
+      <div class="track-placeholder">
+        <svg id="trackSvg" viewBox="0 0 1000 340" role="img" aria-label="Interactive roller coaster track with draggable control points"></svg>
+      </div>
     </section>
 
     <div class="below-track">
       <section class="controls-metrics panel" aria-label="Animation controls and live readings">
         <div class="controls" aria-label="Animation controls">
-          <button class="play-button" type="button">Play</button>
-          <button type="button">Pause</button>
-          <button type="button">Reset</button>
+          <button id="playSimulation" class="play-button" type="button">Play</button>
+          <button id="pauseSimulation" type="button">Pause</button>
+          <button id="resetTrack" type="button">Reset</button>
         </div>
 
         <div class="readouts" aria-label="Live readings">
           <div class="readout">
             <span class="readout-label">Speed</span>
-            <strong>-- mph</strong>
+            <strong id="speedReadout">-- mph</strong>
           </div>
           <div class="readout">
             <span class="readout-label">Height</span>
-            <strong>-- ft</strong>
+            <strong id="heightReadout">-- ft</strong>
           </div>
           <div class="readout">
             <span class="readout-label">G-force</span>
-            <strong>-- g</strong>
+            <strong id="gForceReadout">-- g</strong>
           </div>
         </div>
       </section>
 
       <aside class="status-panel panel" aria-label="Safety status">
         <span>Safety status</span>
-        <strong>Not calculated</strong>
+        <strong id="safetyStatus">Not calculated</strong>
       </aside>
     </div>
 
@@ -310,5 +384,643 @@
       </section>
     </section>
   </main>
+  <script>
+    const svg = document.getElementById("trackSvg");
+    const resetButton = document.getElementById("resetTrack");
+    const playButton = document.getElementById("playSimulation");
+    const pauseButton = document.getElementById("pauseSimulation");
+
+    const viewWidth = 1000;
+    const viewHeight = 340;
+    const left = 70;
+    const right = 930;
+    const top = 30;
+    const bottom = 290;
+    const minHeight = 0;
+    const maxHeight = 120;
+
+    const defaultPoints = [
+      { x: 70, height: 100 },
+      { x: 242, height: 68 },
+      { x: 414, height: 12 },
+      { x: 586, height: 82 },
+      { x: 758, height: 28 },
+      { x: 930, height: 72 }
+    ];
+
+    let points = defaultPoints.map(point => ({ ...point }));
+    let draggedPoint = null;
+    let selectedPosition = 0;
+    let animationFrameId = null;
+    let lastFrameTime = null;
+    let isRunning = false;
+    let simulationStatusReason = "idle";
+
+    const gravity = 32.2;
+    const mphFactor = 0.6818;
+    const speedReadout = document.getElementById("speedReadout");
+    const heightReadout = document.getElementById("heightReadout");
+    const gForceReadout = document.getElementById("gForceReadout");
+    const safetyStatus = document.getElementById("safetyStatus");
+    const statusPanel = document.querySelector(".status-panel");
+
+    function heightToY(height) {
+      return bottom - ((height - minHeight) / (maxHeight - minHeight)) * (bottom - top);
+    }
+
+    function yToHeight(y) {
+      const height = ((bottom - y) / (bottom - top)) * (maxHeight - minHeight);
+      return Math.max(minHeight, Math.min(maxHeight, height));
+    }
+
+    function svgPoint(event) {
+      const rect = svg.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left) * (viewWidth / rect.width),
+        y: (event.clientY - rect.top) * (viewHeight / rect.height)
+      };
+    }
+
+    function createSvgElement(name, attributes = {}) {
+      const element = document.createElementNS("http://www.w3.org/2000/svg", name);
+      for (const [key, value] of Object.entries(attributes)) {
+        element.setAttribute(key, value);
+      }
+      return element;
+    }
+
+    function buildSmoothPath(trackPoints) {
+      if (trackPoints.length < 2) return "";
+
+      let path = `M ${trackPoints[0].x} ${heightToY(trackPoints[0].height)}`;
+
+      for (let i = 0; i < trackPoints.length - 1; i++) {
+        const p0 = trackPoints[i - 1] || trackPoints[i];
+        const p1 = trackPoints[i];
+        const p2 = trackPoints[i + 1];
+        const p3 = trackPoints[i + 2] || p2;
+
+        const cp1x = p1.x + (p2.x - p0.x) / 6;
+        const cp1y = heightToY(p1.height) + (heightToY(p2.height) - heightToY(p0.height)) / 6;
+        const cp2x = p2.x - (p3.x - p1.x) / 6;
+        const cp2y = heightToY(p2.height) - (heightToY(p3.height) - heightToY(p1.height)) / 6;
+
+        path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${heightToY(p2.height)}`;
+      }
+
+      return path;
+    }
+
+    function getTrackSamples() {
+      const samples = [];
+
+      for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[i - 1] || points[i];
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const p3 = points[i + 2] || p2;
+
+        const cp1x = p1.x + (p2.x - p0.x) / 6;
+        const cp1y = heightToY(p1.height) + (heightToY(p2.height) - heightToY(p0.height)) / 6;
+        const cp2x = p2.x - (p3.x - p1.x) / 6;
+        const cp2y = heightToY(p2.height) - (heightToY(p3.height) - heightToY(p1.height)) / 6;
+
+        const steps = i === points.length - 2 ? 24 : 20;
+        for (let step = 0; step < steps; step++) {
+          if (i > 0 && step === 0) continue;
+          const t = step / steps;
+          const oneMinusT = 1 - t;
+          const svgX =
+            oneMinusT ** 3 * p1.x +
+            3 * oneMinusT ** 2 * t * cp1x +
+            3 * oneMinusT * t ** 2 * cp2x +
+            t ** 3 * p2.x;
+          const svgY =
+            oneMinusT ** 3 * heightToY(p1.height) +
+            3 * oneMinusT ** 2 * t * cp1y +
+            3 * oneMinusT * t ** 2 * cp2y +
+            t ** 3 * heightToY(p2.height);
+
+          const position = ((svgX - left) / (right - left)) * 1000;
+          samples.push({
+            position: Math.max(0, Math.min(1000, position)),
+            height: yToHeight(svgY)
+          });
+        }
+      }
+
+      return samples.sort((a, b) => a.position - b.position);
+    }
+
+    function getPhysicsAtPosition(position) {
+      const samples = getTrackSamples();
+      if (!samples.length) {
+        return { position, height: points[0].height, speedMph: 0, gForce: 1, radius: Infinity, shape: "flat", energyFailure: false, gFailure: null };
+      }
+
+      let closestIndex = 0;
+      let closestDistance = Infinity;
+      samples.forEach((sample, index) => {
+        const distance = Math.abs(sample.position - position);
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestIndex = index;
+        }
+      });
+
+      const sample = samples[closestIndex];
+      const initialHeight = points[0].height;
+      const heightDifference = initialHeight - sample.height;
+      const energyFailure = heightDifference < 0;
+      const speedFps = energyFailure ? 0 : Math.sqrt(2 * gravity * Math.max(0, heightDifference));
+      const speedMph = energyFailure ? 0 : speedFps * mphFactor;
+
+      const previous = samples[Math.max(0, closestIndex - 1)];
+      const next = samples[Math.min(samples.length - 1, closestIndex + 1)];
+      const dx = Math.max(next.position - previous.position, 0.001);
+      const firstDerivative = (next.height - previous.height) / dx;
+      const secondDerivative = (next.height - 2 * sample.height + previous.height) / ((dx / 2) ** 2);
+
+      let radius = Infinity;
+      let shape = "flat";
+      let gForce = 1;
+
+      if (Math.abs(secondDerivative) > 0.001) {
+        const curvature = Math.abs(secondDerivative) / ((1 + firstDerivative ** 2) ** 1.5);
+        radius = 1 / curvature;
+        shape = secondDerivative > 0 ? "valley" : "crest";
+
+        if (!energyFailure) {
+          gForce = shape === "valley"
+            ? 1 + (speedFps ** 2) / (gravity * radius)
+            : 1 - (speedFps ** 2) / (gravity * radius);
+        }
+      }
+
+      let gFailure = null;
+      if (!energyFailure && gForce > 4) gFailure = "high";
+      if (!energyFailure && gForce < -1) gFailure = "low";
+
+      return {
+        position: sample.position,
+        height: sample.height,
+        speedMph,
+        gForce,
+        radius,
+        shape,
+        energyFailure,
+        gFailure
+      };
+    }
+
+    function positionToX(position) {
+      return left + (position / 1000) * (right - left);
+    }
+
+    function stopSimulation(reason) {
+      isRunning = false;
+      simulationStatusReason = reason;
+      lastFrameTime = null;
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
+
+      statusPanel.classList.remove("status-unsafe", "status-energy");
+      if (reason === "energy") {
+        safetyStatus.textContent = "Cannot Reach Track";
+        statusPanel.classList.add("status-energy");
+      } else if (reason === "high") {
+        safetyStatus.textContent = "Unsafe: above 4 g";
+        statusPanel.classList.add("status-unsafe");
+      } else if (reason === "low") {
+        safetyStatus.textContent = "Unsafe: below -1 g";
+        statusPanel.classList.add("status-unsafe");
+      } else if (reason === "complete") {
+        safetyStatus.textContent = "Safe";
+      } else if (reason === "paused") {
+        safetyStatus.textContent = "Paused";
+      }
+    }
+
+    function getCarScreenPoint(position) {
+      const samples = getTrackSamples();
+      if (!samples.length) {
+        return { x: left, y: heightToY(points[0].height) };
+      }
+
+      let nextIndex = 0;
+      for (let i = 0; i < samples.length; i++) {
+        if (samples[i].position >= position) {
+          nextIndex = i;
+          break;
+        }
+        nextIndex = i;
+      }
+
+      const next = samples[nextIndex];
+      const previous = samples[Math.max(0, nextIndex - 1)];
+      const span = Math.max(next.position - previous.position, 0.001);
+      const t = Math.max(0, Math.min(1, (position - previous.position) / span));
+      return {
+        x: positionToX(previous.position + (next.position - previous.position) * t),
+        y: heightToY(previous.height + (next.height - previous.height) * t)
+      };
+    }
+
+    function drawCar() {
+      const carPoint = getCarScreenPoint(selectedPosition);
+      const car = createSvgElement("g", {
+        class: "roller-coaster-car",
+        "aria-label": "Roller coaster car"
+      });
+
+      car.appendChild(createSvgElement("ellipse", {
+        class: "roller-coaster-car-shadow",
+        cx: carPoint.x,
+        cy: carPoint.y + 13,
+        rx: 18,
+        ry: 5
+      }));
+
+      car.appendChild(createSvgElement("rect", {
+        x: carPoint.x - 15,
+        y: carPoint.y - 12,
+        width: 30,
+        height: 18,
+        rx: 5,
+        class: "roller-coaster-car"
+      }));
+
+      car.appendChild(createSvgElement("circle", {
+        cx: carPoint.x - 9,
+        cy: carPoint.y + 8,
+        r: 4,
+        fill: "#18324a",
+        stroke: "#ffffff",
+        "stroke-width": "2"
+      }));
+
+      car.appendChild(createSvgElement("circle", {
+        cx: carPoint.x + 9,
+        cy: carPoint.y + 8,
+        r: 4,
+        fill: "#18324a",
+        stroke: "#ffffff",
+        "stroke-width": "2"
+      }));
+
+      svg.appendChild(car);
+    }
+
+    function animateSimulation(timestamp) {
+      if (!isRunning) return;
+
+      if (lastFrameTime === null) {
+        lastFrameTime = timestamp;
+      }
+
+      const elapsedSeconds = Math.min((timestamp - lastFrameTime) / 1000, 0.05);
+      lastFrameTime = timestamp;
+
+      const physics = getPhysicsAtPosition(selectedPosition);
+      if (physics.energyFailure) {
+        stopSimulation("energy");
+        drawTrack();
+        return;
+      }
+      if (physics.gFailure === "high") {
+        stopSimulation("high");
+        drawTrack();
+        return;
+      }
+      if (physics.gFailure === "low") {
+        stopSimulation("low");
+        drawTrack();
+        return;
+      }
+
+      const speedFps = (physics.speedMph / mphFactor);
+      if (speedFps <= 0) {
+        stopSimulation("energy");
+        drawTrack();
+        return;
+      }
+
+      selectedPosition = Math.min(1000, selectedPosition + speedFps * elapsedSeconds);
+      if (selectedPosition >= 1000) {
+        selectedPosition = 1000;
+        drawTrack();
+        stopSimulation("complete");
+        return;
+      }
+
+      drawTrack();
+      animationFrameId = requestAnimationFrame(animateSimulation);
+    }
+
+    function updateLiveReadouts() {
+      const physics = getPhysicsAtPosition(selectedPosition);
+
+      heightReadout.textContent = `${physics.height.toFixed(1)} ft`;
+      statusPanel.classList.remove("status-unsafe", "status-energy");
+
+      if (physics.energyFailure) {
+        speedReadout.textContent = "0 mph";
+        gForceReadout.textContent = "-- g";
+        statusPanel.classList.add("status-energy");
+      } else {
+        speedReadout.textContent = `${physics.speedMph.toFixed(1)} mph`;
+        gForceReadout.textContent = `${physics.gForce.toFixed(2)} g`;
+      }
+
+      let overallEnergyFailure = false;
+      let overallHighG = false;
+      let overallLowG = false;
+      for (let position = 0; position <= 1000; position += 5) {
+        const positionPhysics = getPhysicsAtPosition(position);
+        overallEnergyFailure ||= positionPhysics.energyFailure;
+        overallHighG ||= positionPhysics.gFailure === "high";
+        overallLowG ||= positionPhysics.gFailure === "low";
+      }
+
+      if (overallEnergyFailure) {
+        safetyStatus.textContent = "Cannot Reach Track";
+        statusPanel.classList.add("status-energy");
+      } else if (overallHighG) {
+        safetyStatus.textContent = "Unsafe: above 4 g";
+        statusPanel.classList.remove("status-energy");
+        statusPanel.classList.add("status-unsafe");
+      } else if (overallLowG) {
+        safetyStatus.textContent = "Unsafe: below -1 g";
+        statusPanel.classList.remove("status-energy");
+        statusPanel.classList.add("status-unsafe");
+      } else {
+        safetyStatus.textContent = "Safe";
+      }
+
+      if (simulationStatusReason === "paused") {
+        safetyStatus.textContent = "Paused";
+      } else if (simulationStatusReason === "running") {
+        safetyStatus.textContent = "Running";
+      } else if (simulationStatusReason === "energy") {
+        safetyStatus.textContent = "Cannot Reach Track";
+        statusPanel.classList.remove("status-unsafe");
+        statusPanel.classList.add("status-energy");
+      } else if (simulationStatusReason === "high") {
+        safetyStatus.textContent = "Unsafe: above 4 g";
+        statusPanel.classList.remove("status-energy");
+        statusPanel.classList.add("status-unsafe");
+      } else if (simulationStatusReason === "low") {
+        safetyStatus.textContent = "Unsafe: below -1 g";
+        statusPanel.classList.remove("status-energy");
+        statusPanel.classList.add("status-unsafe");
+      } else if (simulationStatusReason === "complete") {
+        safetyStatus.textContent = "Safe";
+      }
+
+      return physics;
+    }
+
+    function drawAxes() {
+      for (let height = 0; height <= maxHeight; height += 20) {
+        const y = heightToY(height);
+        svg.appendChild(createSvgElement("line", {
+          class: "grid-line",
+          x1: left,
+          y1: y,
+          x2: right,
+          y2: y
+        }));
+
+        const label = createSvgElement("text", {
+          class: "axis-label",
+          x: left - 12,
+          y: y + 4,
+          "text-anchor": "end"
+        });
+        label.textContent = `${height} ft`;
+        svg.appendChild(label);
+      }
+
+      for (let position = 0; position <= 1000; position += 200) {
+        const x = left + (position / 1000) * (right - left);
+        svg.appendChild(createSvgElement("line", {
+          class: "grid-line",
+          x1: x,
+          y1: top,
+          x2: x,
+          y2: bottom
+        }));
+
+        const label = createSvgElement("text", {
+          class: "axis-label",
+          x,
+          y: bottom + 28,
+          "text-anchor": "middle"
+        });
+        label.textContent = `${position} ft`;
+        svg.appendChild(label);
+      }
+
+      svg.appendChild(createSvgElement("line", {
+        class: "axis-line",
+        x1: left,
+        y1: bottom,
+        x2: right,
+        y2: bottom
+      }));
+
+      svg.appendChild(createSvgElement("line", {
+        class: "axis-line",
+        x1: left,
+        y1: top,
+        x2: left,
+        y2: bottom
+      }));
+
+      const positionTitle = createSvgElement("text", {
+        class: "axis-label",
+        x: (left + right) / 2,
+        y: viewHeight - 4,
+        "text-anchor": "middle"
+      });
+      positionTitle.textContent = "Horizontal position";
+      svg.appendChild(positionTitle);
+
+      const heightTitle = createSvgElement("text", {
+        class: "axis-label",
+        x: 14,
+        y: (top + bottom) / 2,
+        "text-anchor": "middle",
+        transform: `rotate(-90 14 ${(top + bottom) / 2})`
+      });
+      heightTitle.textContent = "Height";
+      svg.appendChild(heightTitle);
+    }
+
+    function stopDrag(event) {
+      if (!draggedPoint) return;
+
+      draggedPoint.classList.remove("dragging");
+      if (event && svg.hasPointerCapture && svg.hasPointerCapture(event.pointerId)) {
+        svg.releasePointerCapture(event.pointerId);
+      }
+      draggedPoint = null;
+    }
+
+    function drawTrack() {
+      svg.replaceChildren();
+      drawAxes();
+
+      const path = createSvgElement("path", {
+        class: "track-line",
+        d: buildSmoothPath(points)
+      });
+      svg.appendChild(path);
+
+      const samples = getTrackSamples();
+      for (let position = 0; position <= 1000; position += 10) {
+        const physics = getPhysicsAtPosition(position);
+        if (!physics.energyFailure && !physics.gFailure) continue;
+
+        const markerClass = physics.energyFailure
+          ? "energy-marker"
+          : physics.gFailure === "low"
+            ? "g-low-marker"
+            : "g-high-marker";
+        const marker = createSvgElement("circle", {
+          class: `failure-marker ${markerClass}`,
+          cx: positionToX(physics.position),
+          cy: heightToY(physics.height),
+          r: 7,
+          title: physics.energyFailure
+            ? "Cannot reach this section"
+            : physics.gFailure === "high"
+              ? "G-force exceeds 4 g"
+              : "G-force is below -1 g"
+        });
+        svg.appendChild(marker);
+      }
+
+      points.forEach((point, index) => {
+        const circle = createSvgElement("circle", {
+          class: "control-point",
+          cx: point.x,
+          cy: heightToY(point.height),
+          r: 9,
+          tabindex: "0",
+          role: "slider",
+          "aria-label": `Track control point ${index + 1}, ${point.height.toFixed(0)} feet`,
+          "aria-valuemin": minHeight,
+          "aria-valuemax": maxHeight,
+          "aria-valuenow": point.height.toFixed(0)
+        });
+
+        circle.addEventListener("pointerdown", event => {
+          event.preventDefault();
+          if (isRunning) stopSimulation("paused");
+          draggedPoint = circle;
+          circle.classList.add("dragging");
+          selectedPosition = ((point.x - left) / (right - left)) * 1000;
+          svg.setPointerCapture(event.pointerId);
+        });
+
+        circle.addEventListener("keydown", event => {
+          if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+          event.preventDefault();
+          if (isRunning) stopSimulation("paused");
+          point.height += event.key === "ArrowUp" ? 2 : -2;
+          point.height = Math.max(minHeight, Math.min(maxHeight, point.height));
+          selectedPosition = ((point.x - left) / (right - left)) * 1000;
+          drawTrack();
+        });
+
+        svg.appendChild(circle);
+      });
+
+      const selectedPhysics = updateLiveReadouts();
+      const selectedMarker = createSvgElement("circle", {
+        class: "selected-marker",
+        cx: positionToX(selectedPhysics.position),
+        cy: heightToY(selectedPhysics.height),
+        r: 6
+      });
+      svg.appendChild(selectedMarker);
+      drawCar();
+    }
+
+    svg.addEventListener("pointermove", event => {
+      if (!draggedPoint) return;
+
+      const pointIndex = Array.from(svg.querySelectorAll(".control-point")).indexOf(draggedPoint);
+      if (pointIndex < 0) return;
+
+      const position = svgPoint(event);
+      points[pointIndex].height = yToHeight(position.y);
+      selectedPosition = ((points[pointIndex].x - left) / (right - left)) * 1000;
+      drawTrack();
+      draggedPoint = svg.querySelectorAll(".control-point")[pointIndex];
+      draggedPoint.classList.add("dragging");
+    });
+
+    svg.addEventListener("pointerdown", event => {
+      if (event.target.classList.contains("control-point")) return;
+      const position = svgPoint(event);
+      if (position.x < left || position.x > right || position.y < top || position.y > bottom) return;
+      selectedPosition = ((position.x - left) / (right - left)) * 1000;
+      drawTrack();
+    });
+
+    svg.addEventListener("pointerup", stopDrag);
+    svg.addEventListener("pointercancel", stopDrag);
+
+    playButton.addEventListener("click", () => {
+      if (isRunning) return;
+      if (selectedPosition >= 1000) {
+        selectedPosition = 0;
+      }
+
+      const physics = getPhysicsAtPosition(selectedPosition);
+      if (physics.energyFailure) {
+        stopSimulation("energy");
+        drawTrack();
+        return;
+      }
+      if (physics.gFailure === "high") {
+        stopSimulation("high");
+        drawTrack();
+        return;
+      }
+      if (physics.gFailure === "low") {
+        stopSimulation("low");
+        drawTrack();
+        return;
+      }
+
+      isRunning = true;
+      simulationStatusReason = "running";
+      lastFrameTime = null;
+      statusPanel.classList.remove("status-unsafe", "status-energy");
+      safetyStatus.textContent = "Running";
+      animationFrameId = requestAnimationFrame(animateSimulation);
+    });
+
+    pauseButton.addEventListener("click", () => {
+      if (!isRunning) return;
+      stopSimulation("paused");
+      drawTrack();
+    });
+
+    resetButton.addEventListener("click", () => {
+      points = defaultPoints.map(point => ({ ...point }));
+      selectedPosition = 0;
+      stopSimulation("complete");
+      stopDrag();
+      drawTrack();
+    });
+
+    drawTrack();
+  </script>
 </body>
 </html>
