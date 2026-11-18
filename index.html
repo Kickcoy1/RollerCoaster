@@ -247,6 +247,53 @@
       color: #d97706;
     }
 
+    .ride-summary {
+      margin-top: 14px;
+      padding: 14px 18px;
+    }
+
+    .ride-summary h2 {
+      margin: 0 0 10px;
+      font-size: 1rem;
+    }
+
+    .ride-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .summary-item {
+      padding: 10px;
+      border-left: 3px solid #b8c7d6;
+      background: #f8fafc;
+    }
+
+    .summary-item span {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .summary-item strong {
+      font-size: clamp(1rem, 2vw, 1.22rem);
+    }
+
+    .ride-summary.status-safe .summary-status strong {
+      color: var(--green);
+    }
+
+    .ride-summary.status-unsafe .summary-status strong {
+      color: #dc2626;
+    }
+
+    .ride-summary.status-energy .summary-status strong {
+      color: #d97706;
+    }
+
     .plots {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -351,6 +398,10 @@
         grid-template-columns: 1fr;
       }
 
+      .ride-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .controls {
         flex-wrap: wrap;
       }
@@ -365,6 +416,10 @@
         display: flex;
         align-items: baseline;
         justify-content: space-between;
+      }
+
+      .ride-summary-grid {
+        grid-template-columns: 1fr;
       }
 
       .readout-label {
@@ -415,6 +470,28 @@
         <strong id="safetyStatus">Not calculated</strong>
       </aside>
     </div>
+
+    <section id="rideSummary" class="ride-summary panel status-safe" aria-label="Ride summary">
+      <h2>Ride Summary</h2>
+      <div class="ride-summary-grid">
+        <div class="summary-item">
+          <span>Maximum speed</span>
+          <strong id="summaryMaxSpeed">-- mph</strong>
+        </div>
+        <div class="summary-item">
+          <span>Maximum g-force</span>
+          <strong id="summaryMaxG">-- g</strong>
+        </div>
+        <div class="summary-item">
+          <span>Minimum g-force</span>
+          <strong id="summaryMinG">-- g</strong>
+        </div>
+        <div class="summary-item summary-status">
+          <span>Overall safety</span>
+          <strong id="summaryStatus">Not calculated</strong>
+        </div>
+      </div>
+    </section>
 
     <section class="plots" aria-label="Simulation plots">
       <section class="plot-panel panel">
@@ -467,6 +544,11 @@
     const gForceReadout = document.getElementById("gForceReadout");
     const safetyStatus = document.getElementById("safetyStatus");
     const statusPanel = document.querySelector(".status-panel");
+    const rideSummary = document.getElementById("rideSummary");
+    const summaryMaxSpeed = document.getElementById("summaryMaxSpeed");
+    const summaryMaxG = document.getElementById("summaryMaxG");
+    const summaryMinG = document.getElementById("summaryMinG");
+    const summaryStatus = document.getElementById("summaryStatus");
     const speedPlot = document.getElementById("speedPlot");
     const gForcePlot = document.getElementById("gForcePlot");
 
@@ -803,11 +885,43 @@
       let overallEnergyFailure = false;
       let overallHighG = false;
       let overallLowG = false;
+      let summaryMaxSpeedValue = 0;
+      let summaryMaxGValue = null;
+      let summaryMinGValue = null;
       for (let position = 0; position <= 1000; position += 5) {
         const positionPhysics = getPhysicsAtPosition(position);
         overallEnergyFailure ||= positionPhysics.energyFailure;
         overallHighG ||= positionPhysics.gFailure === "high";
         overallLowG ||= positionPhysics.gFailure === "low";
+
+        if (!positionPhysics.energyFailure) {
+          summaryMaxSpeedValue = Math.max(summaryMaxSpeedValue, positionPhysics.speedMph);
+          if (summaryMaxGValue === null || positionPhysics.gForce > summaryMaxGValue) {
+            summaryMaxGValue = positionPhysics.gForce;
+          }
+          if (summaryMinGValue === null || positionPhysics.gForce < summaryMinGValue) {
+            summaryMinGValue = positionPhysics.gForce;
+          }
+        }
+      }
+
+      summaryMaxSpeed.textContent = `${summaryMaxSpeedValue.toFixed(1)} mph`;
+      summaryMaxG.textContent = summaryMaxGValue === null ? "-- g" : `${summaryMaxGValue.toFixed(2)} g`;
+      summaryMinG.textContent = summaryMinGValue === null ? "-- g" : `${summaryMinGValue.toFixed(2)} g`;
+
+      rideSummary.classList.remove("status-safe", "status-unsafe", "status-energy");
+      if (overallEnergyFailure) {
+        summaryStatus.textContent = "Cannot Reach Track";
+        rideSummary.classList.add("status-energy");
+      } else if (overallHighG) {
+        summaryStatus.textContent = "Unsafe: above 4 g";
+        rideSummary.classList.add("status-unsafe");
+      } else if (overallLowG) {
+        summaryStatus.textContent = "Unsafe: below -1 g";
+        rideSummary.classList.add("status-unsafe");
+      } else {
+        summaryStatus.textContent = "Safe";
+        rideSummary.classList.add("status-safe");
       }
 
       if (overallEnergyFailure) {
