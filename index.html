@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Roller Coaster Designer</title>
+  <style>
+    :root {
+      --background: #f4f7fb;
+      --panel: #ffffff;
+      --text: #18324a;
+      --muted: #64748b;
+      --border: #d9e2ec;
+      --track: #4b6075;
+      --green: #24804d;
+      --blue: #1677b8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--background);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .app {
+      width: min(1180px, calc(100% - 32px));
+      margin: 24px auto 40px;
+    }
+
+    header {
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: clamp(1.7rem, 3vw, 2.35rem);
+    }
+
+    header p {
+      max-width: 720px;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 3px 12px rgba(24, 50, 74, 0.06);
+    }
+
+    .track-panel {
+      padding: 14px;
+    }
+
+    .track-placeholder {
+      position: relative;
+      min-height: 340px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background:
+        linear-gradient(to right, transparent 49.8%, #edf2f7 50%, transparent 50.2%) center / 80px 100%,
+        linear-gradient(to bottom, transparent 49.8%, #edf2f7 50%, transparent 50.2%) center / 100% 68px,
+        #fbfdff;
+    }
+
+    .track-placeholder::before {
+      content: "";
+      position: absolute;
+      left: 5%;
+      right: 5%;
+      bottom: 54%;
+      height: 118px;
+      border-top: 5px solid var(--track);
+      border-radius: 50%;
+      transform: skewY(-4deg);
+    }
+
+    .track-placeholder::after {
+      content: "Roller coaster track";
+      position: absolute;
+      left: 50%;
+      bottom: 17%;
+      transform: translateX(-50%);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .below-track {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(230px, 280px);
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .controls-metrics {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 14px;
+      padding: 14px;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    button {
+      min-height: 42px;
+      padding: 8px 14px;
+      border: 1px solid #b8c7d6;
+      border-radius: 7px;
+      background: #ffffff;
+      color: var(--text);
+      font: inherit;
+      font-weight: 700;
+      cursor: default;
+    }
+
+    .play-button {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: #ffffff;
+    }
+
+    .readouts {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(90px, 1fr));
+      gap: 8px;
+    }
+
+    .readout {
+      min-width: 0;
+      padding: 8px 10px;
+      border-left: 3px solid #b8c7d6;
+      background: #f8fafc;
+    }
+
+    .readout-label {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .readout strong {
+      font-size: clamp(1.05rem, 2vw, 1.35rem);
+    }
+
+    .status-panel {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 14px 18px;
+      border-left: 5px solid var(--green);
+    }
+
+    .status-panel span {
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .status-panel strong {
+      margin-top: 5px;
+      color: var(--green);
+      font-size: 1.25rem;
+    }
+
+    .plots {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .plot-panel {
+      min-height: 230px;
+      padding: 14px;
+    }
+
+    .plot-panel h2 {
+      margin: 0 0 10px;
+      font-size: 1rem;
+    }
+
+    .plot-placeholder {
+      position: relative;
+      height: 175px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background:
+        linear-gradient(to right, transparent 49.8%, #edf2f7 50%, transparent 50.2%) center / 20% 100%,
+        linear-gradient(to bottom, transparent 49.8%, #edf2f7 50%, transparent 50.2%) center / 100% 25%,
+        #fbfdff;
+    }
+
+    .plot-placeholder span {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    @media (max-width: 760px) {
+      .app {
+        width: min(100% - 20px, 1180px);
+        margin-top: 14px;
+      }
+
+      .track-placeholder {
+        min-height: 260px;
+      }
+
+      .below-track,
+      .plots {
+        grid-template-columns: 1fr;
+      }
+
+      .controls-metrics {
+        grid-template-columns: 1fr;
+      }
+
+      .controls {
+        flex-wrap: wrap;
+      }
+    }
+
+    @media (max-width: 430px) {
+      .readouts {
+        grid-template-columns: 1fr;
+      }
+
+      .readout {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+
+      .readout-label {
+        margin-bottom: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>Roller Coaster Designer</h1>
+      <p>Explore how track shape affects speed and vertical g-force using a simplified, no-friction energy model.</p>
+    </header>
+
+    <section class="track-panel panel" aria-label="Roller coaster track">
+      <div class="track-placeholder"></div>
+    </section>
+
+    <div class="below-track">
+      <section class="controls-metrics panel" aria-label="Animation controls and live readings">
+        <div class="controls" aria-label="Animation controls">
+          <button class="play-button" type="button">Play</button>
+          <button type="button">Pause</button>
+          <button type="button">Reset</button>
+        </div>
+
+        <div class="readouts" aria-label="Live readings">
+          <div class="readout">
+            <span class="readout-label">Speed</span>
+            <strong>-- mph</strong>
+          </div>
+          <div class="readout">
+            <span class="readout-label">Height</span>
+            <strong>-- ft</strong>
+          </div>
+          <div class="readout">
+            <span class="readout-label">G-force</span>
+            <strong>-- g</strong>
+          </div>
+        </div>
+      </section>
+
+      <aside class="status-panel panel" aria-label="Safety status">
+        <span>Safety status</span>
+        <strong>Not calculated</strong>
+      </aside>
+    </div>
+
+    <section class="plots" aria-label="Simulation plots">
+      <section class="plot-panel panel">
+        <h2>Speed vs. Track Position</h2>
+        <div class="plot-placeholder"><span>Speed plot</span></div>
+      </section>
+
+      <section class="plot-panel panel">
+        <h2>G-force vs. Track Position</h2>
+        <div class="plot-placeholder"><span>G-force plot</span></div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

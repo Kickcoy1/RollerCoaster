@@ -1,5 +1,9 @@
 # Roller Coaster Designer
 
+## App overview
+
+The app is a simple educational, single-page roller coaster simulator in `index.html`. It shows an interactive track with draggable control points, animates a car, displays live height, speed, and vertical g-force, plots speed and g-force along the track, and identifies safe or unsafe sections using a simplified no-friction physics model.
+
 ## Purpose
 
 Create a simple educational simulator that helps students visualize how track shape affects speed and vertical g-force using conservation of energy and track curvature.
@@ -107,3 +111,30 @@ Additional checks:
 - Detailed vehicle or passenger dynamics.
 - Three-dimensional track design.
 - Real-world construction costs.
+
+## Build stages
+
+1. **Page layout mockup**
+   - Build the static HTML structure and responsive CSS only.
+   - Include the track area, live metrics/status panel, Play/Pause/Reset controls, and two plot areas.
+   - Check: the track remains the main focus, both plots are readable, and the layout stacks correctly on narrow screens.
+
+2. **Interactive track**
+   - Add the default control points and a smooth SVG track.
+   - Draw labeled axes and make track points draggable.
+   - Check: dragging redraws the track smoothly and Reset restores the default track and 100 ft starting point.
+
+3. **Physics calculations**
+   - Implement speed from `v = sqrt(2g(h_initial - h))`, mph conversion, curvature-based vertical g-force, and the `4 g`/`-1 g` limits.
+   - Prevent negative square-root results and identify unreachable track sections separately from g-force failures.
+   - Check: formula units are correct and a higher track point produces an energy failure instead of an invalid result.
+
+4. **Animation and live outputs**
+   - Add Play, Pause, Reset, car movement, live height/speed/g-force, and status/failure markers.
+   - Check: controls work, live values correspond to the car's track position, and the status distinguishes safe, unsafe, and unreachable conditions.
+
+5. **Plots and hand-calculation validation**
+   - Add labeled speed and g-force plots aligned with the track position.
+   - Run the required test: 100 ft start, 0 ft valley, 100 ft radius, no friction, `g = 32.2 ft/s²`.
+   - Check: the app shows approximately 54.7 mph and 3.00 g at the valley and should classify it as safe.
+   - Check: decreasing the radius increases g-force and moving the start height recalculates the simulation.
