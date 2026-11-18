@@ -166,6 +166,40 @@
       gap: 8px;
     }
 
+    .friction-control {
+      min-width: 220px;
+      margin-left: 2px;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #f8fafc;
+    }
+
+    .friction-control label {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .friction-control input {
+      width: 100%;
+      accent-color: var(--blue);
+    }
+
+    .friction-note {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.72rem;
+      line-height: 1.25;
+    }
+
     button {
       min-height: 42px;
       padding: 8px 14px;
@@ -447,6 +481,14 @@
           <button id="playSimulation" class="play-button" type="button">Play</button>
           <button id="pauseSimulation" type="button">Pause</button>
           <button id="resetTrack" type="button">Reset</button>
+          <div class="friction-control">
+            <label for="frictionSlider">
+              <span>Rolling friction</span>
+              <strong id="frictionValue">0.000</strong>
+            </label>
+            <input id="frictionSlider" type="range" min="0" max="0.020" step="0.001" value="0" aria-label="Simplified rolling-friction coefficient">
+            <span class="friction-note">Simplified friction approximation</span>
+          </div>
         </div>
 
         <div class="readouts" aria-label="Live readings">
@@ -539,6 +581,7 @@
 
     const gravity = 32.2;
     const mphFactor = 0.6818;
+    let frictionCoefficient = 0;
     const speedReadout = document.getElementById("speedReadout");
     const heightReadout = document.getElementById("heightReadout");
     const gForceReadout = document.getElementById("gForceReadout");
@@ -551,6 +594,8 @@
     const summaryStatus = document.getElementById("summaryStatus");
     const speedPlot = document.getElementById("speedPlot");
     const gForcePlot = document.getElementById("gForcePlot");
+    const frictionSlider = document.getElementById("frictionSlider");
+    const frictionValue = document.getElementById("frictionValue");
 
     function heightToY(height) {
       return bottom - ((height - minHeight) / (maxHeight - minHeight)) * (bottom - top);
@@ -601,6 +646,8 @@
 
     function getTrackSamples() {
       const samples = [];
+      let cumulativeDistance = 0;
+      let previousSvgPoint = null;
 
       for (let i = 0; i < points.length - 1; i++) {
         const p0 = points[i - 1] || points[i];
@@ -630,9 +677,19 @@
             t ** 3 * heightToY(p2.height);
 
           const position = ((svgX - left) / (right - left)) * 1000;
+          const height = yToHeight(svgY);
+
+          if (previousSvgPoint) {
+            const dxFeet = (svgX - previousSvgPoint.x) / (right - left) * 1000;
+            const dyFeet = (previousSvgPoint.y - svgY) / (bottom - top) * maxHeight;
+            cumulativeDistance += Math.sqrt(dxFeet * dxFeet + dyFeet * dyFeet);
+          }
+
+          previousSvgPoint = { x: svgX, y: svgY };
           samples.push({
             position: Math.max(0, Math.min(1000, position)),
-            height: yToHeight(svgY)
+            height,
+            distance: cumulativeDistance
           });
         }
       }
@@ -659,8 +716,10 @@
       const sample = samples[closestIndex];
       const initialHeight = points[0].height;
       const heightDifference = initialHeight - sample.height;
-      const energyFailure = heightDifference < 0;
-      const speedFps = energyFailure ? 0 : Math.sqrt(2 * gravity * Math.max(0, heightDifference));
+      const frictionLoss = 2 * frictionCoefficient * gravity * (sample.distance || 0);
+      const availableEnergy = 2 * gravity * heightDifference - frictionLoss;
+      const energyFailure = availableEnergy < 0;
+      const speedFps = energyFailure ? 0 : Math.sqrt(Math.max(0, availableEnergy));
       const speedMph = energyFailure ? 0 : speedFps * mphFactor;
 
       const previous = samples[Math.max(0, closestIndex - 1)];
@@ -896,7 +955,7 @@
 
         if (!positionPhysics.energyFailure) {
           summaryMaxSpeedValue = Math.max(summaryMaxSpeedValue, positionPhysics.speedMph);
-          if (summaryMaxGValue === null || positionPhysics.gForce > summaryMaxGValue) {
+          if (positionPhysics.gForce > 0 && (summaryMaxGValue === null || positionPhysics.gForce > summaryMaxGValue)) {
             summaryMaxGValue = positionPhysics.gForce;
           }
           if (summaryMinGValue === null || positionPhysics.gForce < summaryMinGValue) {
@@ -1319,6 +1378,24 @@
     pauseButton.addEventListener("click", () => {
       if (!isRunning) return;
       stopSimulation("paused");
+      drawTrack();
+    });
+
+    frictionSlider.addEventListener("input", () => {
+      frictionCoefficient = Number(frictionSlider.value);
+      frictionValue.textContent = frictionCoefficient.toFixed(3);
+
+      const physics = getPhysicsAtPosition(selectedPosition);
+      if (physics.energyFailure) {
+        stopSimulation("energy");
+      } else if (physics.gFailure === "high") {
+        stopSimulation("high");
+      } else if (physics.gFailure === "low") {
+        stopSimulation("low");
+      } else if (isRunning) {
+        stopSimulation("paused");
+      }
+
       drawTrack();
     });
 
